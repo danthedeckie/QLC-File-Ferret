@@ -1,16 +1,46 @@
+'''
+    "QLC+ File Ferret" - (C) 2019 Daniel Fairhead
+    ---------------------------------------------
+
+    reader.py
+     - QLC+ File reading / writing / modifying.
+
+'''
+
+
+
 import xml.etree.ElementTree as ET
 
-NS = {'qlc': 'http://www.qlcplus.org/Workspace'}
+QLC_NAMESPACE = 'http://www.qlcplus.org/Workspace'
+NS = {'qlc': QLC_NAMESPACE}
+
+ET.register_namespace('', QLC_NAMESPACE)
 
 class QLCFile(object):
     def __init__(self, filename):
         self.root = ET.parse(filename).getroot()
 
+    def write(self, filename, *vargs, **kwargs):
+        new_file = ET.ElementTree(self.root)
+
+        with open(filename, 'w') as f:
+            # apparently etree cannot write doctypes :-(
+            # oh well. we can.
+            f.write('<?xml version "1.0" encoding="UTF-8"?>\n<!DOCTYPE Workspace>\n')
+            new_file.write(f, encoding="unicode", xml_declaration=False, *vargs, **kwargs)
+
     def list_functions(self):
         return self.root.findall('qlc:Engine/qlc:Function', NS)
 
     def highest_function_id(self):
-        return max(int(f.attrib['ID']) for f in self.list_functions())
+        '''
+            When creating new functions, or copying a function in from another file
+            we need to know where to start incrementing from.
+        '''
+        try:
+            return max(int(f.attrib['ID']) for f in self.list_functions())
+        except ValueError:
+            return 0
 
     def used_function_ids(self):
         for f in self.list_functions():
@@ -21,20 +51,13 @@ class QLCFile(object):
 
     def all_used_function_ids(self):
         used_ids = set()
-        for f in self._used_function_ids_by_vc():
-            used_ids.add(f)
-
-        for f in self._used_function_ids_by_chasers():
-            used_ids.add(f)
-
-        for f in self._used_function_ids_by_sequences():
-            used_ids.add(f)
-
-        for f in self._used_function_ids_by_collections():
-            used_ids.add(f)
-
-        for f in self._used_function_ids_by_shows():
-            used_ids.add(f)
+        used_ids.update(
+                self._used_function_ids_by_vc(),
+                self._used_function_ids_by_chasers(),
+                self._used_function_ids_by_sequences(),
+                self._used_function_ids_by_collections(),
+                self._used_function_ids_by_shows(),
+            )
 
         return used_ids
 
@@ -69,13 +92,26 @@ class QLCFile(object):
     def function_by_id(self, fid):
         return self.root.find("qlc:Engine//qlc:Function[@ID='%i']" % int(fid), NS)
 
-    def subfunctions(self, func):
-        raise NotImplemented("subfuncs.... this is gonna get recursive")
+    def subfunction_ids(self, func, recurse=False):
+
         if func.attrib['Type'] == 'Show':
             for f in func.findall("*//qlc:ShowFunction", NS):
-                yield self.function_by_id(f.attrib["ID"])
+                subfunc = self.function_by_id(f.attrib["ID"])
+                yield subfunc
+                if recurse:
+                    yield from self.subfunction_ids(subfunc)
+        elif func.attrib['Type'] == 'Sequence':
+            yield func.attrib['BoundScene']
+        elif func.attrib['Type'] in ('Collection', 'Chaser'):
+            for f in func.findall("*//qlc:Step", NS):
+                subfunc = self.function_by_id(f.text)
+                yield subfunc
+                if recurse:
+                    yield from self.subfunction_ids(subfunc)
+        else:
+            print("No Subfunctions!")
 
-        # TODO!
+
 
     def paste_functions_here(self, clipboard):
 
@@ -87,20 +123,25 @@ class QLCFile(object):
         for f in clipboard:
             new_functions.append(ET.fromstring(ET.tostring(f)))
 
-        print(new_functions)
+        # print(new_functions)
 
         fresh_id = self.highest_function_id() + 1
 
         current_ids = set(self.used_function_ids())
 
+        # TODO: Look for Duplicate Functions - and don't copy them automatically,
+        #       but instead ask the user what to do.
+
         for f in new_functions:
             if f.attrib['ID'] in current_ids:
                 fresh_id += 1
                 f.attrib['ID'] = str(fresh_id)
-                current_ids.append(f.attrib['ID'])
+                current_ids.add(f.attrib['ID'])
                 # TODO:
                 #  - go through all other functions looking for any uses of the old
                 #    function id, and replace it with the new one.
-            # TODO:add the new functions to this file.
 
+        enginenode = self.root.find('qlc:Engine', NS)
 
+        for f in new_functions:
+            enginenode.append(f)
