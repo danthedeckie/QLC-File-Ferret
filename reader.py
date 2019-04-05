@@ -23,7 +23,7 @@ class QLCFile(object):
     def write(self, filename, *vargs, **kwargs):
         new_file = ET.ElementTree(self.root)
 
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding="utf8") as f:
             # apparently etree cannot write doctypes :-(
             # oh well. we can.
             f.write('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE Workspace>\n')
@@ -126,6 +126,19 @@ class QLCFile(object):
                 if f.text == old_id:
                     f.text = new_id
 
+    def iter_functions_for_clipboard(self, ids):
+        '''
+            given a list of ids, generate all functions which need to be copied,
+            including sub-functions / dependencies.
+        '''
+        for iid in ids:
+            func = self.function_by_id(iid)
+            if not func: continue
+
+            yield func
+
+            for subfunc in self.subfunction_ids(func, recurse=True):
+                yield subfunc
 
     def paste_functions_here(self, clipboard):
 
@@ -139,7 +152,7 @@ class QLCFile(object):
 
         # print(new_functions)
 
-        fresh_id = self.highest_function_id() + 1
+        fresh_id = self.highest_function_id()# + 1
 
         current_ids = set(self.used_function_ids())
 

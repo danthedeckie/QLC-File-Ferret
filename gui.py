@@ -13,7 +13,7 @@
 ########
 
 import sys
-from os.path import basename
+from os.path import basename, abspath, dirname, join as joindir
 
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -30,9 +30,14 @@ FUNCTION_TYPES = [
     ('Collection', 'Collections'),
     ('EFX', 'EFX'),
     ('Audio', 'Audio Files'),
+    ('Video', 'Video Files'),
     ('Show', 'Shows'),
     ('Chaser', 'Chasers'),
+    ('RGBMatrix', 'RGB Matrix Functions'),
+    ('Script', 'Scripts'),
     ]
+
+ICONS = {}
 
 # Global State: (oh noes)
 CLIPBOARD = set()
@@ -67,7 +72,8 @@ class QLCFileBox(ttk.Frame):
         ttk.Label(self, textvariable=self.filenameText).pack() 
 
         self.filterText = ttk.Entry(self) # TODO
-        self.filterText.pack(padx=0.1)
+        self.filterText.bind('<Key>', self.update_filter)
+        self.filterText.pack(padx=0.1, fill=tk.X, expand=1)
 
         self.functionList = ttk.Treeview(self)
         self.functionList.pack(fill=tk.BOTH, expand=1)
@@ -104,6 +110,9 @@ class QLCFileBox(ttk.Frame):
         self.qfile = QLCFile(self.filename)
         self.filenameText.set(basename(self.filename))
 
+    def update_filter(self, event):
+        self.update_treeview()
+
     def update_treeview(self):
         '''
             This should be able to be called multiple times without mucking up
@@ -118,7 +127,7 @@ class QLCFileBox(ttk.Frame):
 
         # Top level tree items (Sections):
         for iid, plural in FUNCTION_TYPES:
-            self.functionList.insert('', 'end', '_' + iid, text=plural)
+            self.functionList.insert('', 'end', '_' + iid, text=plural, open=True, image=ICONS[iid])
 
         allcount = 0
         orphancount = 0
@@ -129,10 +138,15 @@ class QLCFileBox(ttk.Frame):
         # TODO: Show in folders mode
         # TODO: Create folders and sort out functions into new folders depending on usage.
         # TODO: Images for function type...
+        # TODO: Checking / Fixing Folders, what if something has a path that doesn't exist?
+
+        filtertext = self.filterText.get()
 
         for f in funcs:
             allcount += 1
             name = "{} [{}]".format(f.attrib["Name"],f.attrib["ID"])
+            if not filtertext in name.lower(): continue
+            
             self.functionList.insert('_' + f.attrib["Type"],'end', 'FUNC:' + f.attrib["ID"], text=name)
 
             #[print(x) for x in self.qfile.subfunction_ids(f)]
@@ -150,15 +164,9 @@ class QLCFileBox(ttk.Frame):
                 if iid.startswith('FUNC:')]
 
         CLIPBOARD.clear()
-
-        for iid in selected_ids:
-            func = self.qfile.function_by_id(iid)
-            if not func: continue
-
+        
+        for func in self.qfile.iter_functions_for_clipboard(selected_ids):
             CLIPBOARD.add(func)
-
-            for subfunc in self.qfile.subfunction_ids(func, recurse=True):
-                CLIPBOARD.add(subfunc)
 
         print('%i items in clipboard' % len(CLIPBOARD))
 
@@ -220,6 +228,13 @@ if __name__ == '__main__':
     app = Application()
 
     app.master.title('QLC+ Multi-file Helper Utility')
+
+    iconsdir = joindir(dirname(abspath(__file__)), 'icons')
+    for functype, _ in FUNCTION_TYPES:
+        icon = tk.PhotoImage(file=joindir(iconsdir, functype.lower() + '.png'))
+        icon = icon.subsample(2, 2)
+        ICONS[functype] = icon
+
 
     for f in (sys.argv[1:]):
         try:
