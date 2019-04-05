@@ -26,7 +26,7 @@ class QLCFile(object):
         with open(filename, 'w') as f:
             # apparently etree cannot write doctypes :-(
             # oh well. we can.
-            f.write('<?xml version "1.0" encoding="UTF-8"?>\n<!DOCTYPE Workspace>\n')
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE Workspace>\n')
             new_file.write(f, encoding="unicode", xml_declaration=False, *vargs, **kwargs)
 
     def list_functions(self):
@@ -95,7 +95,7 @@ class QLCFile(object):
     def subfunction_ids(self, func, recurse=False):
 
         if func.attrib['Type'] == 'Show':
-            for f in func.findall("*//qlc:ShowFunction", NS):
+            for f in func.findall(".//qlc:ShowFunction", NS):
                 subfunc = self.function_by_id(f.attrib["ID"])
                 yield subfunc
                 if recurse:
@@ -103,14 +103,28 @@ class QLCFile(object):
         elif func.attrib['Type'] == 'Sequence':
             yield func.attrib['BoundScene']
         elif func.attrib['Type'] in ('Collection', 'Chaser'):
-            for f in func.findall("*//qlc:Step", NS):
+            print(ET.tostring(func))
+            for f in func.findall(".//qlc:Step", NS):
+                print('step!')
+                print(ET.tostring(f))
                 subfunc = self.function_by_id(f.text)
                 yield subfunc
                 if recurse:
                     yield from self.subfunction_ids(subfunc)
-        else:
-            print("No Subfunctions!")
 
+
+    def subfunction_id_replace(self, func, old_id, new_id):
+        if func.attrib['Type'] == 'Show':
+            for f in func.findall(".//qlc:ShowFunction", NS):
+                if f.attrib["ID"] == old_id:
+                    f.attrib["ID"] = new_id
+        elif func.attrib['Type'] == 'Sequence':
+            if func.attrib['BoundScene'] == old_id:
+                func.attrib['BoundScene'] = new_id
+        elif func.attrib['Type'] in ('Collection', 'Chaser'):
+            for f in func.findall(".//qlc:Step", NS):
+                if f.text == old_id:
+                    f.text = new_id
 
 
     def paste_functions_here(self, clipboard):
@@ -132,14 +146,19 @@ class QLCFile(object):
         # TODO: Look for Duplicate Functions - and don't copy them automatically,
         #       but instead ask the user what to do.
 
+        replace_tables = {}
+
         for f in new_functions:
             if f.attrib['ID'] in current_ids:
                 fresh_id += 1
+
+                # Fix any references to this function_id in other functions:
+                for ff in new_functions:
+                    self.subfunction_id_replace(ff, f.attrib['ID'], str(fresh_id))
+
+                # And update this function itself...
                 f.attrib['ID'] = str(fresh_id)
                 current_ids.add(f.attrib['ID'])
-                # TODO:
-                #  - go through all other functions looking for any uses of the old
-                #    function id, and replace it with the new one.
 
         enginenode = self.root.find('qlc:Engine', NS)
 

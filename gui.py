@@ -35,7 +35,7 @@ FUNCTION_TYPES = [
     ]
 
 # Global State: (oh noes)
-CLIPBOARD = []
+CLIPBOARD = set()
 
 class QLCFileBox(ttk.Frame):
     '''
@@ -155,12 +155,12 @@ class QLCFileBox(ttk.Frame):
             func = self.qfile.function_by_id(iid)
             if not func: continue
 
-            if not func in CLIPBOARD:
-                CLIPBOARD.append(func)
+            CLIPBOARD.add(func)
 
-            for func in self.qfile.subfunction_ids(func, recurse=True):
-                if not func in CLIPBOARD:
-                    CLIPBOARD.append(func)
+            for subfunc in self.qfile.subfunction_ids(func, recurse=True):
+                CLIPBOARD.add(subfunc)
+
+        print('%i items in clipboard' % len(CLIPBOARD))
 
 
     def pasteToHere(self):
@@ -174,6 +174,7 @@ class Application(ttk.Frame):
     '''
     def __init__(self, master=None):
         tk.Frame.__init__(self, master)
+
         self.pack()
         self.create_widgets()
 
@@ -217,6 +218,7 @@ class Application(ttk.Frame):
 
 if __name__ == '__main__':
     app = Application()
+
     app.master.title('QLC+ Multi-file Helper Utility')
 
     for f in (sys.argv[1:]):
