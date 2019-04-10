@@ -13,7 +13,7 @@
 ########
 
 import sys
-from os.path import basename, abspath, dirname, join as joindir
+from os.path import basename, abspath, dirname, join as joindir, splitext
 
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -94,8 +94,16 @@ class QLCFileBox(ttk.Frame):
         self.toolbar.pack(fill=tk.BOTH, expand=1)
 
     def save_as(self):
+        oldpath = abspath(self.filename)
+        base, extn = splitext(basename(oldpath))
+        new_default_name = base + '_modified' + extn
         filename = asksaveasfile(
-                filetypes=[("QLC+ File", '*.qxw')]
+                title="Save File as",
+                defaultextension=".qxf",
+                initialdir=dirname(oldpath),
+                initialfile=new_default_name,
+                filetypes=[("QLC+ File", '*.qxw')],
+
                 )
 
         if not filename: return
@@ -104,6 +112,7 @@ class QLCFileBox(ttk.Frame):
 
         self.qfile.write(filename)
         self.filename = filename
+        self.filenameText.set(basename(self.filename))
         self.update_treeview()
 
     def load_file(self):
@@ -222,6 +231,14 @@ class Application(ttk.Frame):
 
         x = QLCFileBox(self.filesArea, filename)
         self.filesArea.add(x, minsize=100)
+
+        # resize all panes:
+
+        panes = self.filesArea.panes()
+        panesize = self.filesArea.winfo_width() / len(panes)
+        for pane in panes:
+            self.filesArea.paneconfigure(pane, width = panesize)
+
 
 
 if __name__ == '__main__':
